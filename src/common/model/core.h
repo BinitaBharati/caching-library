@@ -65,6 +65,15 @@ char phone[MAX_PHONE_CHARS], char email[MAX_EMAIL_CHARS], double balance) {
 
     mapEntry->custId = custId;
 
+    /**
+     * It copies at most MAX_NAME_CHARS bytes from firstName into mapEntry->firstName.
+
+    If the source string (firstName) has fewer than MAX_NAME_CHARS characters,
+    → it pads the rest with '\0' bytes (nulls). ✅
+
+    If the source string has equal to or more than MAX_NAME_CHARS characters,
+    → it copies exactly MAX_NAME_CHARS bytes and does not null-terminate.
+     */
     strncpy(mapEntry->firstName, firstName, MAX_NAME_CHARS);
     strncpy(mapEntry->lastName, lastName, MAX_NAME_CHARS);
     strncpy(mapEntry->phone, phone, MAX_PHONE_CHARS);

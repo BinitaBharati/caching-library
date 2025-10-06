@@ -34,30 +34,37 @@ unsigned int hash(unsigned int key){
     return key % TABLE_SIZE;
 }
 
-void insert_to_hash_table(int custId, char firstName[MAX_NAME_CHARS], char lastName[MAX_NAME_CHARS],
+void update_hash_table(int custId, char firstName[MAX_NAME_CHARS], char lastName[MAX_NAME_CHARS],
 char phone[MAX_PHONE_CHARS], char email[MAX_EMAIL_CHARS], double balance) {
     
     if (custId == INVALID_INT) {
         return;
     }
 
-    customer_info* mapEntry = transform(custId, firstName, lastName, phone, email, balance);
+    //customer_info* mapEntry = transform(custId, firstName, lastName, phone, email, balance);
 
     int index = hash(custId); 
     int lock_index = get_lock_index(index);
     pthread_mutex_lock(&bucket_locks[lock_index]);
     if (hash_table[index] == NULL) {
+         customer_info* mapEntry = transform(custId, firstName, lastName, phone, email, balance);
          hash_table[index] = mapEntry;   
          pthread_mutex_unlock(&bucket_locks[lock_index]);
          return;
     }
 
     customer_info *headPtr = hash_table[index];
-    if (headPtr->custId  == mapEntry->custId) {
+    if (headPtr->custId  == custId) {
+        //update cache value for the custId.
+        strncpy(headPtr->firstName, firstName, MAX_NAME_CHARS);
+        strncpy(headPtr->lastName, lastName, MAX_NAME_CHARS);
+        strncpy(headPtr->phone, phone, MAX_PHONE_CHARS);
+        strncpy(headPtr->email, email, MAX_EMAIL_CHARS);
+        headPtr->balance = balance;
         //replace the current node with input node.
-        mapEntry->next = headPtr->next;
-        hash_table[index] = mapEntry;
-        free(headPtr);
+        //mapEntry->next = headPtr->next;
+        //hash_table[index] = mapEntry;
+        //free(headPtr);
         pthread_mutex_unlock(&bucket_locks[lock_index]);
         return;
     }
@@ -65,11 +72,16 @@ char phone[MAX_PHONE_CHARS], char email[MAX_EMAIL_CHARS], double balance) {
         customer_info *prevPtr = headPtr;
         customer_info *nextPtr = headPtr->next;
         while (nextPtr != NULL) {
-            if (nextPtr->custId == mapEntry->custId) {
+            if (nextPtr->custId == custId) {
                 //replace the current node with input node.
-                mapEntry->next = nextPtr->next;
-                prevPtr->next = mapEntry;  
-                free(nextPtr);
+                //mapEntry->next = nextPtr->next;
+                //prevPtr->next = mapEntry;  
+                //free(nextPtr);
+                strncpy(nextPtr->firstName, firstName, MAX_NAME_CHARS);
+                strncpy(nextPtr->lastName, lastName, MAX_NAME_CHARS);
+                strncpy(nextPtr->phone, phone, MAX_PHONE_CHARS);
+                strncpy(nextPtr->email, email, MAX_EMAIL_CHARS);
+                nextPtr->balance = balance;
                 pthread_mutex_unlock(&bucket_locks[lock_index]);
                 return;
         }
@@ -77,6 +89,7 @@ char phone[MAX_PHONE_CHARS], char email[MAX_EMAIL_CHARS], double balance) {
         nextPtr = nextPtr->next;
     }
     //if control is here that means, we need to add a brand new node at the end of the linked list
+    customer_info* mapEntry = transform(custId, firstName, lastName, phone, email, balance);
     mapEntry->next = NULL;
     prevPtr->next = mapEntry;
     pthread_mutex_unlock(&bucket_locks[lock_index]);
@@ -180,7 +193,7 @@ void initHashTable() {
 
 void onboardCustomer(int custId, char firstName[MAX_NAME_CHARS], char lastName[MAX_NAME_CHARS],
 char phone[MAX_PHONE_CHARS], char email[MAX_EMAIL_CHARS], double balance) {
-    insert_to_hash_table(custId, firstName, lastName, phone, email, balance);
+    update_hash_table(custId, firstName, lastName, phone, email, balance);
 }
 
 /**
@@ -216,7 +229,7 @@ void lookUpBasicCustomerInfo(int custId, char* returnJsonBasicInfo) {
 void updateBasicCustomerInfo(int custId, char* phone, char* email)  {
     char jsonStr[CUSTOMER_INFO_JSON_STR_SIZE];//on stack, unused in this case, but have to pass it as per definition of hash_table_look_up method.
     customer_info* existingCustomerInfo = hash_table_look_up(custId, jsonStr);
-    insert_to_hash_table(custId, existingCustomerInfo->firstName, existingCustomerInfo->lastName, phone, email, existingCustomerInfo->balance);
+    update_hash_table(custId, existingCustomerInfo->firstName, existingCustomerInfo->lastName, phone, email, existingCustomerInfo->balance);
 }
 
 //end FFI methods
