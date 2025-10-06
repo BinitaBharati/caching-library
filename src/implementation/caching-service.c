@@ -84,7 +84,7 @@ char phone[MAX_PHONE_CHARS], char email[MAX_EMAIL_CHARS], double balance) {
     }   
 }
 
-void hash_table_look_up(unsigned int custId, char* jsonString) {
+customer_info* hash_table_look_up(unsigned int custId, char* jsonString) {
     customer_info *hashmap_value;
     unsigned int index = hash(custId);
     int lock_index = get_lock_index(index);
@@ -130,7 +130,7 @@ void hash_table_look_up(unsigned int custId, char* jsonString) {
             balance
             );
             pthread_mutex_unlock(&bucket_locks[lock_index]);
-            return;
+            return hashmap_value;
        }
        else {
             customer_info *headPtr = hashmap_value;
@@ -160,13 +160,14 @@ void hash_table_look_up(unsigned int custId, char* jsonString) {
                     balance
                     );
                     pthread_mutex_unlock(&bucket_locks[lock_index]);
-                    return;
+                    return nextPtr;
                 }
                 nextPtr = nextPtr->next;
             }
        }
     }   
     pthread_mutex_unlock(&bucket_locks[lock_index]);
+    return NULL;
 }
 
 /**
@@ -209,7 +210,13 @@ char phone[MAX_PHONE_CHARS], char email[MAX_EMAIL_CHARS], double balance) {
  * 
  */
 void lookUpBasicCustomerInfo(int custId, char* returnJsonBasicInfo) {
-    hash_table_look_up(custId, returnJsonBasicInfo);
+    hash_table_look_up(custId, returnJsonBasicInfo);//return customer_info* is unused in this case.
+}
+
+void updateBasicCustomerInfo(int custId, char* phone, char* email)  {
+    char jsonStr[CUSTOMER_INFO_JSON_STR_SIZE];//on stack, unused in this case, but have to pass it as per definition of hash_table_look_up method.
+    customer_info* existingCustomerInfo = hash_table_look_up(custId, jsonStr);
+    insert_to_hash_table(custId, existingCustomerInfo->firstName, existingCustomerInfo->lastName, phone, email, existingCustomerInfo->balance);
 }
 
 //end FFI methods
@@ -224,6 +231,15 @@ int main(int argc, char const *argv[]){
     onboardCustomer(1, firstName, lastName, phone, email, 100.45);
     char jsonStr[CUSTOMER_INFO_JSON_STR_SIZE];
     lookUpBasicCustomerInfo(1, jsonStr);
+    printf("existing customer info = %s\n",jsonStr);
+
+    char phone1[MAX_PHONE_CHARS] = "778877889933";
+    char email1[MAX_EMAIL_CHARS] = "bharati@gmail.com";
+    updateBasicCustomerInfo(1, phone1, email1); 
+    char jsonStr1[CUSTOMER_INFO_JSON_STR_SIZE];
+    lookUpBasicCustomerInfo(1, jsonStr1);
+    printf("updated customer info = %s\n",jsonStr1);
+
     return 0;
 
 }
