@@ -2,7 +2,7 @@
 # include <stdlib.h>
 #include <pthread.h>
 
-#include "../common/model/core.h"
+#include "../common/core.h"
 
 #define TABLE_SIZE 100000000
 #define LOCK_COUNT 4096
