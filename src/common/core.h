@@ -1,7 +1,7 @@
 
 #include <stdio.h>
 #include <string.h>
-# include <stdlib.h>
+#include <stdlib.h>
 
 /**
 What happens if a C string is not null-terminated
