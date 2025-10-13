@@ -19,6 +19,13 @@ void init_locks() {
     }
 }
 
+void init_hash_table() {
+    for (int i = 0 ; i < TABLE_SIZE ; i++) {
+        hash_table[i] = NULL;
+    }
+    init_locks();
+}
+
 int get_lock_index(int bucket_index) {
     return bucket_index % (LOCK_COUNT - 1);
 } 
@@ -27,74 +34,20 @@ unsigned int hash(unsigned int key){
     return key % TABLE_SIZE;
 }
 
-/**
- * This method expects caller method to handle concurrency, ie
- * lock and unlock pthread_mutex from the calling method itself.
- * 
- * This method assumes itself to be thread safe while shifting the 
- * responsibility of concurrency handling to the caller.
- */
-customer_info* look_up_cust_id(int custId) {
-    
-    unsigned int index = hash(custId);
-    customer_info *hashmap_value = hash_table[index];
-    if (hashmap_value != NULL) {
-       if (hashmap_value->custId == custId) {
-            return hashmap_value;
-       }
-       else {
-            customer_info *headPtr = hashmap_value;
-            customer_info *nextPtr = hashmap_value->next;
-            while (nextPtr != NULL) {
-                if (nextPtr->custId == custId) {
-                    return nextPtr;
-                }
-                nextPtr = nextPtr->next;
-            }
-       }
-    }  
-    return NULL;
-}
-
-int getEmptyIndexInTransactionArrayOfCustomer( customer_info* customer_info ) {
-    for (int i = 0 ; i < MAX_TRXNS_PER_CUSTOMER ; i++) {
-        if (customer_info->latest_trxns[i].trxnDate == -1) {
-            return i;
-        }
-    }
-    /* All indexes are filled, we need to shift the array elements to the left
-    while shifting the elements to the left, the oldest array element will get 
-    discarded, and new empty spot will appear at the end of the array.
-    */
-   //shift array to left by 1 element alone.
-   for (int i = 0 ; i < MAX_TRXNS_PER_CUSTOMER - 1 ; i++) {
-        customer_info->latest_trxns[i]=customer_info->latest_trxns[i+1];
-    }
-    transaction_details dummy = {-1, 0.0, 0.0, 0.0};
-    customer_info->latest_trxns[MAX_TRXNS_PER_CUSTOMER - 1] = dummy;
-    return MAX_TRXNS_PER_CUSTOMER - 1;
-}
-
-void ffi_init_hash_table() {
-    for (int i = 0 ; i < TABLE_SIZE ; i++) {
-        hash_table[i] = NULL;
-    }
-    init_locks();
-}
-
-void ffi_insert_to_hash_table(int custId, char firstName[MAX_NAME_CHARS], char lastName[MAX_NAME_CHARS],
+void update_hash_table(int custId, char firstName[MAX_NAME_CHARS], char lastName[MAX_NAME_CHARS],
 char phone[MAX_PHONE_CHARS], char email[MAX_EMAIL_CHARS], double balance) {
     
     if (custId == INVALID_INT) {
         return;
     }
 
+    //customer_info* mapEntry = transform(custId, firstName, lastName, phone, email, balance);
+
     int index = hash(custId); 
     int lock_index = get_lock_index(index);
     pthread_mutex_lock(&bucket_locks[lock_index]);
-   
     if (hash_table[index] == NULL) {
-         customer_info* mapEntry = transformBasicInputToCustomerInfo(custId, firstName, lastName, phone, email, balance);
+         customer_info* mapEntry = transform(custId, firstName, lastName, phone, email, balance);
          hash_table[index] = mapEntry;   
          pthread_mutex_unlock(&bucket_locks[lock_index]);
          return;
@@ -108,6 +61,10 @@ char phone[MAX_PHONE_CHARS], char email[MAX_EMAIL_CHARS], double balance) {
         strncpy(headPtr->phone, phone, MAX_PHONE_CHARS);
         strncpy(headPtr->email, email, MAX_EMAIL_CHARS);
         headPtr->balance = balance;
+        //replace the current node with input node.
+        //mapEntry->next = headPtr->next;
+        //hash_table[index] = mapEntry;
+        //free(headPtr);
         pthread_mutex_unlock(&bucket_locks[lock_index]);
         return;
     }
@@ -116,6 +73,10 @@ char phone[MAX_PHONE_CHARS], char email[MAX_EMAIL_CHARS], double balance) {
         customer_info *nextPtr = headPtr->next;
         while (nextPtr != NULL) {
             if (nextPtr->custId == custId) {
+                //replace the current node with input node.
+                //mapEntry->next = nextPtr->next;
+                //prevPtr->next = mapEntry;  
+                //free(nextPtr);
                 strncpy(nextPtr->firstName, firstName, MAX_NAME_CHARS);
                 strncpy(nextPtr->lastName, lastName, MAX_NAME_CHARS);
                 strncpy(nextPtr->phone, phone, MAX_PHONE_CHARS);
@@ -128,7 +89,7 @@ char phone[MAX_PHONE_CHARS], char email[MAX_EMAIL_CHARS], double balance) {
         nextPtr = nextPtr->next;
     }
     //if control is here that means, we need to add a brand new node at the end of the linked list
-    customer_info* mapEntry = transformBasicInputToCustomerInfo(custId, firstName, lastName, phone, email, balance);
+    customer_info* mapEntry = transform(custId, firstName, lastName, phone, email, balance);
     mapEntry->next = NULL;
     prevPtr->next = mapEntry;
     pthread_mutex_unlock(&bucket_locks[lock_index]);
@@ -136,26 +97,103 @@ char phone[MAX_PHONE_CHARS], char email[MAX_EMAIL_CHARS], double balance) {
     }   
 }
 
-void ffi_update_basic_customer_info(int custId, char phone[MAX_PHONE_CHARS], char email[MAX_EMAIL_CHARS]) {
-    
-    if (custId == INVALID_INT) {
-        return;
-    }
-
-    int index = hash(custId); 
+customer_info* hash_table_look_up(unsigned int custId, char* jsonString) {
+    customer_info *hashmap_value;
+    unsigned int index = hash(custId);
     int lock_index = get_lock_index(index);
     pthread_mutex_lock(&bucket_locks[lock_index]);
+    
+    hashmap_value = hash_table[index];
+    if (hashmap_value != NULL) {
+       if (hashmap_value->custId == custId) {
+            char* firstName = hashmap_value->firstName;
+            char* lastName = hashmap_value->lastName;
+            char* phone = hashmap_value->phone;
+            char* email = hashmap_value->email;
+            double balance = hashmap_value->balance;
 
-    customer_info* customer_info = look_up_cust_id(custId);
-    if (customer_info == NULL) {
-         //custInfo is not found in cache. Nothing to do here. 
-         pthread_mutex_unlock(&bucket_locks[lock_index]);
-         return;
-    }
+            /**
+             * It is dangerous to return the original map value as it is to Java, as you need to unlock before returning.
+             * Once unlocked, a write(insert_to_hash_table) for the same key may free the memory that is holding this structure. 
+             * On Java end, as you try to get the value of the returned char pointer, it may get garbage, as the holder 
+             * parent structure itself got collected (free'ed). 
+             * 
+             * So, you need to return a copy of the original map value to Java, and also inform Java guys to call the
+             * corresponding free_string FFI method to free the memory used by this copied string. This is to be done once 
+             * Java is done with reading the output from this method.
+             * 
+             * You wont need seperate free_string FFI call, if you use the char array passed by Java to fill in your final 
+             * map value as a string.
+             */
 
-    strncpy(customer_info->phone, phone, MAX_PHONE_CHARS);
-    strncpy(customer_info->email, email, MAX_EMAIL_CHARS);
-    pthread_mutex_unlock(&bucket_locks[lock_index]);    
+            snprintf(jsonString, CUSTOMER_INFO_JSON_STR_SIZE,
+            "{"
+            "\"id\":%d,"
+            "\"firstName\":\"%s\","
+            "\"lastName\":\"%s\","
+            "\"phone\":\"%s\","
+            "\"email\":\"%s\","
+            "\"balance\":%.2f"
+            "}",
+            custId,
+            firstName,
+            lastName,
+            phone,
+            email,
+            balance
+            );
+            pthread_mutex_unlock(&bucket_locks[lock_index]);
+            return hashmap_value;
+       }
+       else {
+            customer_info *headPtr = hashmap_value;
+            customer_info *nextPtr = hashmap_value->next;
+            while (nextPtr != NULL) {
+                if (nextPtr->custId == custId) {
+                    char* firstName = nextPtr->firstName;
+                    char* lastName = nextPtr->lastName;
+                    char* phone = nextPtr->phone;
+                    char* email = nextPtr->email;
+                    double balance = nextPtr->balance;
+
+                    snprintf(jsonString, CUSTOMER_INFO_JSON_STR_SIZE,
+                    "{"
+                    "\"id\":%d,"
+                    "\"firstName\":\"%s\","
+                    "\"lastName\":\"%s\","
+                    "\"phone\":\"%s\","
+                    "\"email\":\"%s\","
+                    "\"balance\":%.2f"
+                    "}",
+                    custId,
+                    firstName,
+                    lastName,
+                    phone,
+                    email,
+                    balance
+                    );
+                    pthread_mutex_unlock(&bucket_locks[lock_index]);
+                    return nextPtr;
+                }
+                nextPtr = nextPtr->next;
+            }
+       }
+    }   
+    pthread_mutex_unlock(&bucket_locks[lock_index]);
+    return NULL;
+}
+
+/**
+ * Below methods that will be called through FFI.
+ */
+
+void initHashTable() {
+    init_hash_table();
+}
+
+void onboardCustomer(int custId, char firstName[MAX_NAME_CHARS], char lastName[MAX_NAME_CHARS],
+char phone[MAX_PHONE_CHARS], char email[MAX_EMAIL_CHARS], double balance) {
+    update_hash_table(custId, firstName, lastName, phone, email, balance);
 }
 
 /**
@@ -184,192 +222,37 @@ void ffi_update_basic_customer_info(int custId, char phone[MAX_PHONE_CHARS], cha
  * 
  * 
  */
-void ffi_look_up_basic_customer_info(unsigned int custId, char* jsonString) {
-    
-    unsigned int index = hash(custId);
-    int lock_index = get_lock_index(index);
-    pthread_mutex_lock(&bucket_locks[lock_index]);
-    
-    customer_info *hashmap_value = look_up_cust_id(custId);
-
-    if (hashmap_value != NULL) {
-        char* firstName = hashmap_value->firstName;
-        char* lastName = hashmap_value->lastName;
-        char* phone = hashmap_value->phone;
-        char* email = hashmap_value->email;
-        double balance = hashmap_value->balance;
-
-        /**
-             * It is dangerous to return the original map value as it is to Java, as you need to unlock before returning.
-             * Once unlocked, a write(insert_to_hash_table) for the same key may free the memory that is holding this structure. 
-             * On Java end, as you try to get the value of the returned char pointer, it may get garbage, as the holder 
-             * parent structure itself got collected (free'ed). 
-             * 
-             * So, you need to return a copy of the original map value to Java, and also inform Java guys to call the
-             * corresponding free_string FFI method to free the memory used by this copied string. This is to be done once 
-             * Java is done with reading the output from this method.
-             * 
-             * You wont need seperate free_string FFI call, if you use the char array passed by Java to fill in your final 
-             * map value as a string.
-             */
-
-        snprintf(jsonString, CUSTOMER_INFO_JSON_STR_SIZE,
-            "{"
-            "\"id\":%d,"
-            "\"firstName\":\"%s\","
-            "\"lastName\":\"%s\","
-            "\"phone\":\"%s\","
-            "\"email\":\"%s\","
-            "\"balance\":%.2f"
-            "}",
-            custId,
-            firstName,
-            lastName,
-            phone,
-            email,
-            balance
-            );       
-    }   
-    pthread_mutex_unlock(&bucket_locks[lock_index]);
+void lookUpBasicCustomerInfo(int custId, char* returnJsonBasicInfo) {
+    hash_table_look_up(custId, returnJsonBasicInfo);//return customer_info* is unused in this case.
 }
 
-void ffi_addCustomerTransaction(int custId, long trxn_date, int opType, double amount)  {
-    unsigned int index = hash(custId);
-    int lock_index = get_lock_index(index);
-    pthread_mutex_lock(&bucket_locks[lock_index]);
-    customer_info* customer_info = look_up_cust_id(custId);
-    printf("ffi_addCustomerTransaction: customer_info balance = %0.2f\n",customer_info->balance);
-
-    if (customer_info == NULL)  {
-        //Nothing to do here, as the customer with Id is not found in cache.
-        return;
-    }
-
-    /*
-        Find an empty index within the customer_info's latest_trxns. Empty/dummy indexes 
-        are identified by trxnDate value = -1
-    */
-    int emptyIndex = getEmptyIndexInTransactionArrayOfCustomer(customer_info);
-    if (opType == CREDIT_OP_TYPE) {
-        double newBalance = customer_info->balance + amount;
-        customer_info->balance = newBalance;
-        transaction_details dummy =  {trxn_date, amount, 0.0, newBalance};
-        customer_info->latest_trxns[emptyIndex] = dummy;
-    }
-    else if (opType == DEBIT_OP_TYPE) {
-        if (customer_info->balance >= amount) {
-            double newBalance = customer_info->balance - amount;
-            customer_info->balance = newBalance;
-            transaction_details dummy =  {trxn_date, 0.0, amount, newBalance};
-            customer_info->latest_trxns[emptyIndex] = dummy;
-        } 
-    }
-    pthread_mutex_unlock(&bucket_locks[lock_index]);
+void updateBasicCustomerInfo(int custId, char* phone, char* email)  {
+    char jsonStr[CUSTOMER_INFO_JSON_STR_SIZE];//on stack, unused in this case, but have to pass it as per definition of hash_table_look_up method.
+    customer_info* existingCustomerInfo = hash_table_look_up(custId, jsonStr);
+    update_hash_table(custId, existingCustomerInfo->firstName, existingCustomerInfo->lastName, phone, email, existingCustomerInfo->balance);
 }
-
-
-
-void ffi_look_up_customer_trxns(unsigned int custId, char* result) {
-    
-    unsigned int index = hash(custId);
-    int lock_index = get_lock_index(index);
-    pthread_mutex_lock(&bucket_locks[lock_index]);
-    
-    customer_info *hashmap_value = look_up_cust_id(custId);
-
-    if (hashmap_value != NULL) {
-        /**
-         * Below assignment throws compilation error:
-         *       transaction_details trxns[MAX_TRXNS_PER_CUSTOMER] = hashmap_value->latest_trxns;
-         * 
-         * src/implementation/caching-service.c:269:61: error: invalid initializer
-           269 |  transaction_details trxns[MAX_TRXNS_PER_CUSTOMER] = hashmap_value->latest_trxns;
-
-        You’re trying to assign an entire array (hashmap_value->latest_trxns) to another array (trxns).
-        In C, you cannot assign arrays directly — neither in declarations nor later.
-
-        That’s what this GCC error means.C arrays are not first-class objects; they don’t support assignment or copy semantics.
-        
-        Work directly on the original array
-        If you don’t need a copy, and only want to access the existing array, just use a pointer.
-        */
-
-        transaction_details *trxns = hashmap_value->latest_trxns;
-
-        char temp[130];//enough to hold 1 json transaction_details. 10 trxns occupy 1209 bytes.
-        /**
-         * ❗ temp is not automatically “cleared to zeros” before each use.
-            It’s just overwritten completely by snprintf().
-            If your formatted string is shorter than before, leftover garbage could remain beyond the new '\0',
-            but it doesn’t matter — C strings always stop at the null terminator.
-            And who puts null terminator to the string ? It is the job of snprintf.
-         */
-        snprintf(temp, sizeof(temp), "{\"id\":%d,\"trxns\":[", custId);
-        strcat(result, temp);
-
-        for (int i = 0 ; i < MAX_TRXNS_PER_CUSTOMER ; i++){
-            if (trxns[i].trxnDate != -1) {
-                //not a dummy trxn entry
-                snprintf(temp, sizeof(temp),
-                    "{\"date\":%ld,\"credit\":%.2f,\"debit\":%.2f,\"balance\":%.2f}",
-                    trxns[i].trxnDate, trxns[i].credit, trxns[i].debit, trxns[i].balance);
-                strcat(result, temp);
-
-                if (i < MAX_TRXNS_PER_CUSTOMER - 1) {
-                    strcat(result, ",");  // comma between objects
-                }
-            }
-        }
-
-        strcat(result, "]}");  // close array and JSON object
-    }   
-    pthread_mutex_unlock(&bucket_locks[lock_index]);
-}
-
-
-
 
 //end FFI methods
 int main(int argc, char const *argv[]){
-    ffi_init_hash_table();
+    initHashTable();
 
     char firstName[MAX_NAME_CHARS] = "Binita";
     char lastName[MAX_NAME_CHARS] = "BHarati";
     char phone[MAX_PHONE_CHARS] = "984516786";
     char email[MAX_EMAIL_CHARS] = "binita@gmail.com";
 
-    ffi_insert_to_hash_table(1, firstName, lastName, phone, email, 100.0);
+    onboardCustomer(1, firstName, lastName, phone, email, 100.45);
     char jsonStr[CUSTOMER_INFO_JSON_STR_SIZE];
-    ffi_look_up_basic_customer_info(1, jsonStr);
+    lookUpBasicCustomerInfo(1, jsonStr);
     printf("existing customer info = %s\n",jsonStr);
 
     char phone1[MAX_PHONE_CHARS] = "778877889933";
     char email1[MAX_EMAIL_CHARS] = "bharati@gmail.com";
-    ffi_update_basic_customer_info(1, phone1, email1); 
+    updateBasicCustomerInfo(1, phone1, email1); 
     char jsonStr1[CUSTOMER_INFO_JSON_STR_SIZE];
-    ffi_look_up_basic_customer_info(1, jsonStr1);
+    lookUpBasicCustomerInfo(1, jsonStr1);
     printf("updated customer info = %s\n",jsonStr1);
-
-    //ffi_addCustomerTransaction(1, 1234, 100.0, 0.0, 120.0);
-    ffi_addCustomerTransaction(1, 1234, 0, 120.0);
-    ffi_addCustomerTransaction(1, 3456, 1, 100.0);
-    ffi_addCustomerTransaction(1, 2323, 0, 1200.0);
-    ffi_addCustomerTransaction(1, 1212, 1, 200.0);
-    ffi_addCustomerTransaction(1, 1213, 0, 1300.0);
-    ffi_addCustomerTransaction(1, 3212, 0, 500.0);
-    ffi_addCustomerTransaction(1, 3212, 1, 100.0);
-    ffi_addCustomerTransaction(1, 2211, 0, 300.0);
-    ffi_addCustomerTransaction(1, 2212, 1, 200.0);
-    ffi_addCustomerTransaction(1, 3412, 0, 400.0);
-    //11th trxn
-    ffi_addCustomerTransaction(1, 4545, 0, 200.0);
-
-
-    char result[CUSTOMER_TRXN_INFO_JSON_STR_SIZE];
-    ffi_look_up_customer_trxns(1, result);
-    printf("trxns = %s\n",result);
 
     return 0;
 
 }
-
