@@ -233,11 +233,12 @@ void ffi_look_up_basic_customer_info(unsigned int custId, char* jsonString) {
     pthread_mutex_unlock(&bucket_locks[lock_index]);
 }
 
-void ffi_addCustomerTransaction(int custId, long trxn_date, double credit, double debit, double balance)  {
+void ffi_addCustomerTransaction(int custId, long trxn_date, int opType, double amount)  {
     unsigned int index = hash(custId);
     int lock_index = get_lock_index(index);
     pthread_mutex_lock(&bucket_locks[lock_index]);
     customer_info* customer_info = look_up_cust_id(custId);
+    printf("ffi_addCustomerTransaction: customer_info balance = %0.2f\n",customer_info->balance);
 
     if (customer_info == NULL)  {
         //Nothing to do here, as the customer with Id is not found in cache.
@@ -249,9 +250,20 @@ void ffi_addCustomerTransaction(int custId, long trxn_date, double credit, doubl
         are identified by trxnDate value = -1
     */
     int emptyIndex = getEmptyIndexInTransactionArrayOfCustomer(customer_info);
-    transaction_details dummy = {trxn_date, credit, debit, balance};
-    customer_info->latest_trxns[emptyIndex] = dummy;
-
+    if (opType == CREDIT_OP_TYPE) {
+        double newBalance = customer_info->balance + amount;
+        customer_info->balance = newBalance;
+        transaction_details dummy =  {trxn_date, amount, 0.0, newBalance};
+        customer_info->latest_trxns[emptyIndex] = dummy;
+    }
+    else if (opType == DEBIT_OP_TYPE) {
+        if (customer_info->balance >= amount) {
+            double newBalance = customer_info->balance - amount;
+            customer_info->balance = newBalance;
+            transaction_details dummy =  {trxn_date, 0.0, amount, newBalance};
+            customer_info->latest_trxns[emptyIndex] = dummy;
+        } 
+    }
     pthread_mutex_unlock(&bucket_locks[lock_index]);
 }
 
@@ -326,7 +338,7 @@ int main(int argc, char const *argv[]){
     char phone[MAX_PHONE_CHARS] = "984516786";
     char email[MAX_EMAIL_CHARS] = "binita@gmail.com";
 
-    ffi_insert_to_hash_table(1, firstName, lastName, phone, email, 100.45);
+    ffi_insert_to_hash_table(1, firstName, lastName, phone, email, 100.0);
     char jsonStr[CUSTOMER_INFO_JSON_STR_SIZE];
     ffi_look_up_basic_customer_info(1, jsonStr);
     printf("existing customer info = %s\n",jsonStr);
@@ -338,18 +350,19 @@ int main(int argc, char const *argv[]){
     ffi_look_up_basic_customer_info(1, jsonStr1);
     printf("updated customer info = %s\n",jsonStr1);
 
-    ffi_addCustomerTransaction(1, 1234, 100.0, 0.0, 120.0);
-    ffi_addCustomerTransaction(1, 3456, 0.0, 100.0, 0.0);
-    ffi_addCustomerTransaction(1, 2323, 1200.0, 0.0, 1200.0);
-    ffi_addCustomerTransaction(1, 1212, 0.0, 200.0, 1000.0);
-    ffi_addCustomerTransaction(1, 1213, 300.0, 0.0, 1300.0);
-    ffi_addCustomerTransaction(1, 3212, 400.0, 0.0, 1700.0);
-    ffi_addCustomerTransaction(1, 3212, 0.0, 100.0, 1600.0);
-    ffi_addCustomerTransaction(1, 2211, 300.0, 0.0, 1900.0);
-    ffi_addCustomerTransaction(1, 2212, 0.0, 200.0, 1700.0);
-    ffi_addCustomerTransaction(1, 3412, 400.0, 0.0, 2100.0);
+    //ffi_addCustomerTransaction(1, 1234, 100.0, 0.0, 120.0);
+    ffi_addCustomerTransaction(1, 1234, 0, 120.0);
+    ffi_addCustomerTransaction(1, 3456, 1, 100.0);
+    ffi_addCustomerTransaction(1, 2323, 0, 1200.0);
+    ffi_addCustomerTransaction(1, 1212, 1, 200.0);
+    ffi_addCustomerTransaction(1, 1213, 0, 1300.0);
+    ffi_addCustomerTransaction(1, 3212, 0, 500.0);
+    ffi_addCustomerTransaction(1, 3212, 1, 100.0);
+    ffi_addCustomerTransaction(1, 2211, 0, 300.0);
+    ffi_addCustomerTransaction(1, 2212, 1, 200.0);
+    ffi_addCustomerTransaction(1, 3412, 0, 400.0);
     //11th trxn
-    ffi_addCustomerTransaction(1, 4545, 0.0, 200.0, 1900.0);
+    ffi_addCustomerTransaction(1, 4545, 0, 200.0);
 
 
     char result[CUSTOMER_TRXN_INFO_JSON_STR_SIZE];

@@ -116,6 +116,8 @@ Total ≈ 1190 + 11 + 18 = 1219 bytes
 Minified JSON for 1 customer with 10 transactions → ≈1219 bytes (~1.2 KB)
  */
 #define CUSTOMER_TRXN_INFO_JSON_STR_SIZE 1300//≈1219 max chars 
+#define CREDIT_OP_TYPE 0
+#define DEBIT_OP_TYPE 1
 
 
 typedef struct transaction_details{ 
