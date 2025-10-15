@@ -185,6 +185,7 @@ void ffi_update_basic_customer_info(int custId, char phone[MAX_PHONE_CHARS], cha
  * 
  */
 void ffi_look_up_basic_customer_info(unsigned int custId, char* jsonString) {
+    memset(jsonString, 0, CUSTOMER_INFO_JSON_STR_SIZE); //Java side is also doing it, but C should not depend on Java guy.
     
     unsigned int index = hash(custId);
     int lock_index = get_lock_index(index);
@@ -234,8 +235,8 @@ void ffi_look_up_basic_customer_info(unsigned int custId, char* jsonString) {
 }
 
 /**
- * You may wonder why is theer need to have a ffi_look_up_customer_balance, when there is already
- * a ffi_look_up_basic_customer_info. Now, the thing is, cal to ffi_look_up_basic_customer_info
+ * You may wonder why is there need to have a ffi_look_up_customer_balance, when there is already
+ * a ffi_look_up_basic_customer_info. Now, the thing is, call to ffi_look_up_basic_customer_info
  * is costly, as it requires Java side to allocate memory for the input jsonString offheap.
  * Also, this offheap jsonString gets converted into new String(...) in the Java FFI implmn,
  * and then returned to the calling method. This also is another instance of alocating memory,
@@ -243,6 +244,8 @@ void ffi_look_up_basic_customer_info(unsigned int custId, char* jsonString) {
  * instances of costly memory usage by directly returning double.
  * 
  * You may ask, even the FFI understood Java double might need to be converted into Java double ?
+ * The answer is yes, but it happens automatically behind scenes. You dont need to write explicit 
+ * code to convert C double to Java double, unlike the case of C char* to java String data type.
  * Yes, lets see how it goes.
  */
 double ffi_look_up_customer_balance(unsigned int custId) {
