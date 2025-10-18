@@ -269,7 +269,7 @@ void ffi_addCustomerTransaction(int custId, long trxn_date, int opType, double a
     int lock_index = get_lock_index(index);
     pthread_mutex_lock(&bucket_locks[lock_index]);
     customer_info* customer_info = look_up_cust_id(custId);
-    printf("ffi_addCustomerTransaction: customer_info balance = %0.2f\n",customer_info->balance);
+    //printf("ffi_addCustomerTransaction: customer_info balance = %0.2f\n",customer_info->balance);
 
     if (customer_info == NULL)  {
         //Nothing to do here, as the customer with Id is not found in cache.
@@ -301,7 +301,8 @@ void ffi_addCustomerTransaction(int custId, long trxn_date, int opType, double a
 
 
 void ffi_look_up_customer_trxns(unsigned int custId, char* result) {
-    
+    memset(result, 0, CUSTOMER_TRXN_INFO_JSON_STR_SIZE); //Java side is also doing it, but C should not depend on Java guy.
+
     unsigned int index = hash(custId);
     int lock_index = get_lock_index(index);
     pthread_mutex_lock(&bucket_locks[lock_index]);
@@ -354,6 +355,7 @@ void ffi_look_up_customer_trxns(unsigned int custId, char* result) {
 
         strcat(result, "]}");  // close array and JSON object
     }   
+    //printf("trxns = %s\n",result);
     pthread_mutex_unlock(&bucket_locks[lock_index]);
 }
 
