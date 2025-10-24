@@ -189,7 +189,7 @@ char phone[MAX_PHONE_CHARS], char email[MAX_EMAIL_CHARS], double balance) {
 
 
     /*If not initialized, next can point to garbage pointer value.
-    And, you will get C side errors while accesing next, like the code below from lookup method:
+    And, you will get C side errors while accessing next, like the code below from lookup method:
 
      map_entry *headPtr = hashmap_value;
         map_entry *nextPtr = hashmap_value->next;

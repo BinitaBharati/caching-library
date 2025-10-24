@@ -339,17 +339,21 @@ void ffi_look_up_customer_trxns(unsigned int custId, char* result) {
         snprintf(temp, sizeof(temp), "{\"id\":%d,\"trxns\":[", custId);
         strcat(result, temp);
 
-        for (int i = 0 ; i < MAX_TRXNS_PER_CUSTOMER ; i++){
-            if (trxns[i].trxnDate != -1) {
+        if (trxns[0].trxnDate != -1) {
                 //not a dummy trxn entry
                 snprintf(temp, sizeof(temp),
                     "{\"date\":%ld,\"credit\":%.2f,\"debit\":%.2f,\"balance\":%.2f}",
+                    trxns[0].trxnDate, trxns[0].credit, trxns[0].debit, trxns[0].balance);
+                strcat(result, temp);
+        }
+
+        for (int i = 1 ; i < MAX_TRXNS_PER_CUSTOMER ; i++){
+            if (trxns[i].trxnDate != -1) {
+                //not a dummy trxn entry
+                snprintf(temp, sizeof(temp),
+                    ",{\"date\":%ld,\"credit\":%.2f,\"debit\":%.2f,\"balance\":%.2f}",
                     trxns[i].trxnDate, trxns[i].credit, trxns[i].debit, trxns[i].balance);
                 strcat(result, temp);
-
-                if (i < MAX_TRXNS_PER_CUSTOMER - 1) {
-                    strcat(result, ",");  // comma between objects
-                }
             }
         }
 
